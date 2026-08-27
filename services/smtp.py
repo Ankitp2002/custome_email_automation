@@ -3,9 +3,6 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional, Union
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class EmailService:
@@ -18,11 +15,11 @@ class EmailService:
         sender_email: Optional[str] = None,
         use_tls: bool = True,
     ):
-        self.smtp_server = smtp_server or os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(smtp_port or os.getenv("SMTP_PORT", 587))
-        self.smtp_user = smtp_user or os.getenv("SMTP_USER")
-        self.smtp_password = smtp_password or os.getenv("SMTP_PASSWORD")
-        self.sender_email = sender_email or os.getenv("SENDER_EMAIL") or self.smtp_user
+        self.smtp_server = smtp_server
+        self.smtp_port = int(smtp_port)
+        self.smtp_user = smtp_user
+        self.smtp_password = smtp_password
+        self.sender_email = sender_email
         self.use_tls = use_tls
         self.signature = None  # Initialize signature to None
         self._validate_credentials()
