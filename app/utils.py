@@ -18,37 +18,49 @@ def fetch_leads_places_api(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
         # FieldMask limits the data returned to only what you need, minimizing costs
-        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.nationalPhoneNumber",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.nationalPhoneNumber,nextPageToken",
     }
 
     payload = {
         "textQuery": query,
-        "includedType": "gas_station",
+        "pageSize": 20,  # Adjust as needed; max is 20 for Places API
+        "pageToken": None,  # For pagination; can be set to the nextPageToken from previous response
     }
 
+    leads = []
+
     try:
-        response = requests.post(search_url, headers=headers, json=payload, timeout=10)
-        if response.status_code != 200:
-            print(f"API Error {response.status_code}: {response.text}")
-            return []
-
-        places = response.json().get("places", [])
-        leads = []
-
-        for item in places:
-            leads.append(
-                {
-                    "place_id": item.get("id"),
-                    # Extract text safely from the displayName localized object
-                    "name": item.get("displayName", {}).get("text"),
-                    # The website field is 'websiteUri' in Places API (New)
-                    "website": item.get("websiteUri"),
-                    "address": item.get("formattedAddress"),
-                    "phone": item.get("nationalPhoneNumber"),
-                }
+        while True:
+            response = requests.post(
+                search_url, headers=headers, json=payload, timeout=10
             )
-        return leads
+            if response.status_code != 200:
+                print(f"API Error {response.status_code}: {response.text}")
+                return []
 
+            places = response.json().get("places", [])
+
+            if not places:
+                break
+
+            for item in places:
+                leads.append(
+                    {
+                        "place_id": item.get("id"),
+                        # Extract text safely from the displayName localized object
+                        "name": item.get("displayName", {}).get("text"),
+                        # The website field is 'websiteUri' in Places API (New)
+                        "website": item.get("websiteUri"),
+                        "address": item.get("formattedAddress"),
+                        "phone": item.get("nationalPhoneNumber"),
+                    }
+                )
+                
+            payload["pageToken"] = response.json().get("nextPageToken")
+            if not payload["pageToken"]:
+                break
+
+        return leads
     except requests.exceptions.RequestException as e:
         print(f"Request failed: {e}")
         return []
