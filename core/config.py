@@ -1,10 +1,5 @@
 import os
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
-
-load_dotenv(
-    override=True
-)  # Load environment variables from .env file, allowing overrides
 
 
 class Settings(BaseSettings):
@@ -21,5 +16,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str
     GROQ_API_KEY: str
 
+    SEARCH_API_URL: str
+    SEARCH_API_KEY: str
+
     class Config:
         env_file = ".env"
+        allow_override = True
+        extra = "allow"
