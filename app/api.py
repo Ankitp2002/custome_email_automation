@@ -35,7 +35,7 @@ def run_automation(payload: SearchRequest, app_state=Depends(get_app_state)):
     llm_client: llm_agent.LLMManager = app_state.get_llm_client_invoke
     smtp_client: smtp.EmailService = app_state.get_smtp_client_invoke
 
-    for lead in leads_raw[:5]:
+    for lead in leads_raw:
         name = lead.get("name")
         site = lead.get("website")
         email, meta = extract_meta_and_email(site) if site else (None, "")
