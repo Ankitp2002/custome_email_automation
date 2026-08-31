@@ -20,8 +20,8 @@ async def lifespan(app: FastAPI):
     )
     smtp_manager.set_up_default_signature("signature.html")
 
-    app.get_llm_client_invoke = llm_manager
-    app.get_smtp_client_invoke = smtp_manager
+    app.state.get_llm_client_invoke = llm_manager
+    app.state.get_smtp_client_invoke = smtp_manager
 
     yield
 
