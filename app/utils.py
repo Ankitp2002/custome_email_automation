@@ -1,6 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import List
+import re
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+import requests
+from constant import HEADERS
 
 
 def fetch_leads_places_api(
@@ -18,7 +23,7 @@ def fetch_leads_places_api(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
         # FieldMask limits the data returned to only what you need, minimizing costs
-        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.nationalPhoneNumber,nextPageToken",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.reviewSummary,places.nationalPhoneNumber,nextPageToken",
     }
 
     payload = {
@@ -55,7 +60,7 @@ def fetch_leads_places_api(
                         "phone": item.get("nationalPhoneNumber"),
                     }
                 )
-                
+
             payload["pageToken"] = response.json().get("nextPageToken")
             if not payload["pageToken"]:
                 break
@@ -90,3 +95,81 @@ def extract_meta_and_email(url: str):
     except Exception:
         pass
     return email, meta_text[:300]
+
+
+def find_instagram_on_website(website_url: str) -> str:
+    """Scrapes the business homepage to locate an Instagram anchor link."""
+    if not website_url or str(website_url).lower() == "nan":
+        return None
+
+    if not website_url.startswith("http"):
+        website_url = "https://" + website_url
+
+    try:
+        response = requests.get(website_url, headers=HEADERS, timeout=6)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if "instagram.com" in href.lower():
+                    return href
+    except Exception:
+        pass
+    return None
+
+
+def search_instagram_profile(
+    display_name: str, address: str = "", phone: str = ""
+) -> str:
+    """Searches DuckDuckGo without an API key using name, address, and phone number."""
+    # Extract locality/city keywords from formattedAddress (taking the first 2-3 parts)
+    city_hint = ""
+    if address and str(address).lower() != "nan":
+        parts = [p.strip() for p in address.split(",") if p.strip()]
+        city_hint = " ".join(parts[-3:]) if len(parts) >= 3 else address
+
+    phone_clean = phone if (phone and str(phone).lower() != "nan") else ""
+
+    # Build search query targeted to Instagram profiles
+    query = f'{display_name} + {city_hint} + {phone_clean}'.strip()
+
+    try:
+        with DDGS() as ddgs:
+            results = list(
+                ddgs.text(
+                    query,
+                    region="in-en",
+                    max_results=3,
+                    safesearch="moderate",
+                    backend="auto",
+                )
+            )
+            for r in results:
+                url = r.get("href") or r.get("link")
+                return url
+    except Exception:
+        pass
+
+    return None
+
+
+def get_instagram_page(place_data: dict) -> str:
+    """Main wrapper function that uses the full Google Places dictionary."""
+    display_name = place_data.get("name", "")
+    website = place_data.get("website", "")
+    address = place_data.get("address", "")
+    phone = place_data.get("phone", "")
+
+    # 1. First priority: Check business website
+    # if website:
+    #     ig_from_site = find_instagram_on_website(website)
+    #     if ig_from_site:
+    #         return ig_from_site
+
+    # 2. Fallback: Search the web directly
+    if display_name:
+        ig_from_search = search_instagram_profile(display_name, address, phone)
+        if ig_from_search:
+            return ig_from_search
+
+    return None
