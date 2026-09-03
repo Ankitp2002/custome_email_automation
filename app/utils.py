@@ -1,6 +1,17 @@
 import requests
-from bs4 import BeautifulSoup
 from typing import List
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+import random
+from bs4 import BeautifulSoup
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 def fetch_leads_places_api(
@@ -18,12 +29,12 @@ def fetch_leads_places_api(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
         # FieldMask limits the data returned to only what you need, minimizing costs
-        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.nationalPhoneNumber,nextPageToken",
+        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.reviewSummary,places.nationalPhoneNumber,nextPageToken",
     }
 
     payload = {
         "textQuery": query,
-        "pageSize": 20,  # Adjust as needed; max is 20 for Places API
+        "pageSize": 2,  # Adjust as needed; max is 20 for Places API
         "pageToken": None,  # For pagination; can be set to the nextPageToken from previous response
     }
 
@@ -55,10 +66,10 @@ def fetch_leads_places_api(
                         "phone": item.get("nationalPhoneNumber"),
                     }
                 )
-                
-            payload["pageToken"] = response.json().get("nextPageToken")
-            if not payload["pageToken"]:
-                break
+
+                payload["pageToken"] = response.json().get("nextPageToken")
+                if not payload["pageToken"]:
+                    break
 
         return leads
     except requests.exceptions.RequestException as e:
@@ -66,27 +77,62 @@ def fetch_leads_places_api(
         return []
 
 
-def extract_meta_and_email(url: str):
-    email = None
-    meta_text = ""
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            meta_tag = soup.find("meta", attrs={"name": "description"}) or soup.find(
-                "meta", attrs={"property": "og:description"}
-            )
-            if meta_tag and meta_tag.get("content"):
-                meta_text = meta_tag["content"]
-            else:
-                meta_text = " ".join([p.get_text() for p in soup.find_all("p")[:2]])
+def get_human_driver(profile_path: str = r"D:\selenium_chrome_profile"):
+    options = Options()
 
-            emails = re.findall(
-                r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", resp.text
-            )
-            if emails:
-                email = emails[0]
-    except Exception:
-        pass
-    return email, meta_text[:300]
+    # 1. Use a dedicated persistent profile (stores cookies, bypasses cold starts)
+    options.add_argument(f"--user-data-dir={profile_path}")
+    options.add_argument("--profile-directory=Default")
+
+    # 2. Window sizing and rendering flags
+    options.add_argument("--start-maximized")
+    options.add_argument("--disable-infobars")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument(
+        "--headless=new"
+    )  # Use new headless mode for better compatibility
+
+    # 3. Suppress automation flags
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+
+    # 4. Standard desktop user-agent
+    options.add_argument(
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    )
+
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()), options=options
+    )
+
+    # 5. Overwrite navigator.webdriver on page init
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": """
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+            """},
+    )
+
+    return driver
+
+
+def human_type(element, text: str, min_delay: float = 0.05, max_delay: float = 0.18):
+    """Simulates realistic human typing with variable inter-key delays."""
+    for char in text:
+        element.send_keys(char)
+        time.sleep(random.uniform(min_delay, max_delay))
+
+
+def search_by_custome_browser_human(driver, query: str) -> BeautifulSoup:
+    # Step A: Navigate to Google's homepage first
+    driver.get(
+        f"https://duckduckgo.com/?ia=web&origin=funnel_home_google&t=h_&q={query}"
+    )
+    time.sleep(random.uniform(5, 10))  # Random delay to mimic human reading time
+    return BeautifulSoup(driver.page_source, "html.parser")
