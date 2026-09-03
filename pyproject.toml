@@ -17,5 +17,8 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
+    "selenium>=4.48.0",
+    "undetected-chromedriver>=3.5.5",
     "uvicorn>=0.52.4",
+    "webdriver-manager>=4.1.2",
 ]

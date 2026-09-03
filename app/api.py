@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from .dependency import get_app_state
 import pandas as pd
 from .schemas import SearchRequest
-from .utils import fetch_leads_places_api, extract_meta_and_email, get_instagram_page
-from services import smtp, llm_agent
+from .utils import fetch_leads_places_api
+from services import smtp, llm_agent, social_media
 import os
 
 router = APIRouter()
@@ -37,33 +37,30 @@ def run_automation(payload: SearchRequest, app_state=Depends(get_app_state)):
     smtp_client: smtp.EmailService = app_state.get_smtp_client_invoke
 
     for lead in leads_raw:
-        name = lead.get("name")
-        site = lead.get("website")
-        email, meta = extract_meta_and_email(site) if site else (None, "")
-        instagram_url = get_instagram_page(lead)
+        finder = social_media.SocialMediaService(lead, app_state.selenium_driver)
+        results = finder.get_all()
 
         email_body = ""
         status = "No Email Found"
-
+        email = results.get("email")
         if email:
-            try:
-                email_body = llm_client(name, meta)
-                smtp_client.send_email(
-                    to_email=email, subject=f"Inquiry for {name}", body=email_body
-                )
-                status = "Sent"
-            except Exception as e:
-                status = f"Failed: {str(e)}"
+            # try:
+            #     email_body = llm_client(name, meta)
+            #     smtp_client.send_email(
+            #         to_email=email, subject=f"Inquiry for {name}", body=email_body
+            #     )
+            #     status = "Sent"
+            # except Exception as e:
+            #     status = f"Failed: {str(e)}"
+            ...
 
         processed_leads.append(
             {
-                "Name": name,
-                "Website": site,
-                "Email": email,
-                "Metadata": meta,
+                "Name": lead.get("name"),
+                "Website": lead.get("website"),
                 "Draft": email_body,
-                "Instagram URL": instagram_url,
                 "address": lead.get("address"),
+                **results,
                 "Status": status,
                 "user_validation": False,
             }

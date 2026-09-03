@@ -4,6 +4,7 @@ from app.reg_routers import __routers__
 from services.llm_agent import LLMManager
 from services.smtp import EmailService
 from core.config import Settings
+from app.utils import get_human_driver
 
 
 @asynccontextmanager
@@ -22,8 +23,11 @@ async def lifespan(app: FastAPI):
 
     app.state.get_llm_client_invoke = llm_manager
     app.state.get_smtp_client_invoke = smtp_manager
+    app.state.selenium_driver = get_human_driver()
 
     yield
+
+    app.state.selenium_driver.quit()
 
 
 class Server:
