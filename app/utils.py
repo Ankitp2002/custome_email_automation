@@ -29,25 +29,26 @@ def fetch_leads_places_api(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
         # FieldMask limits the data returned to only what you need, minimizing costs
-        "X-Goog-FieldMask": "places.id,places.displayName,places.websiteUri,places.formattedAddress,places.reviewSummary,places.nationalPhoneNumber,nextPageToken",
+        "X-Goog-FieldMask": "places.id,places.priceRange,places.reviewSummary,places.types,places.googleMapsUri,places.displayName,places.websiteUri,places.formattedAddress,places.reviewSummary,places.nationalPhoneNumber,places.addressComponents,nextPageToken",
     }
 
     payload = {
         "textQuery": query,
-        "pageSize": 2,  # Adjust as needed; max is 20 for Places API
+        "pageSize": 20,  # Adjust as needed; max is 20 for Places API
         "pageToken": None,  # For pagination; can be set to the nextPageToken from previous response
     }
 
     leads = []
 
+    count = 0
     try:
-        while True:
+        while count < 5:  # Limit to 5 pages to avoid excessive API calls
+            count += 1
             response = requests.post(
                 search_url, headers=headers, json=payload, timeout=10
             )
             if response.status_code != 200:
-                print(f"API Error {response.status_code}: {response.text}")
-                return []
+                return leads
 
             places = response.json().get("places", [])
 
@@ -55,6 +56,12 @@ def fetch_leads_places_api(
                 break
 
             for item in places:
+                country = [
+                    i
+                    for i in item.get("addressComponents", [])
+                    if i.get("types", [""])[0] == "country"
+                ]
+                price = item.get("priceRange", {})
                 leads.append(
                     {
                         "place_id": item.get("id"),
@@ -64,6 +71,15 @@ def fetch_leads_places_api(
                         "website": item.get("websiteUri"),
                         "address": item.get("formattedAddress"),
                         "phone": item.get("nationalPhoneNumber"),
+                        "city": city,
+                        "country": country[0].get("longText", "") if country else "",
+                        "reviewSummary": item.get("reviewSummary", {})
+                        .get("text", {})
+                        .get("text", ""),
+                        "priceRange": f"{price.get('startPrice', {}).get('unit', '')} - {price.get('endPrice', {}).get('unit', '')}",
+                        "rating": item.get("rating", 0),
+                        "googleMapsUri": item.get("googleMapsUri"),
+                        "types": item.get("types", []),
                     }
                 )
 
@@ -73,11 +89,12 @@ def fetch_leads_places_api(
 
         return leads
     except requests.exceptions.RequestException as e:
-        print(f"Request failed: {e}")
-        return []
+        return leads
 
 
-def get_human_driver(profile_path: str = r"D:\selenium_chrome_profile"):
+def get_human_driver(
+    headless: bool = False, profile_path: str = r"D:\selenium_chrome_profile"
+):
     options = Options()
 
     # 1. Use a dedicated persistent profile (stores cookies, bypasses cold starts)
@@ -90,9 +107,11 @@ def get_human_driver(profile_path: str = r"D:\selenium_chrome_profile"):
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
-    options.add_argument(
-        "--headless=new"
-    )  # Use new headless mode for better compatibility
+
+    if headless:
+        options.add_argument(
+            "--headless"
+        )  # Use new headless mode for better compatibility
 
     # 3. Suppress automation flags
     options.add_argument("--disable-blink-features=AutomationControlled")

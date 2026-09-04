@@ -3,6 +3,8 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional, Union
+import html
+from email.mime.application import MIMEApplication
 
 
 class EmailService:
@@ -13,6 +15,7 @@ class EmailService:
         smtp_user: Optional[str] = None,
         smtp_password: Optional[str] = None,
         sender_email: Optional[str] = None,
+        attachment_path: Optional[str] = None,
         use_tls: bool = True,
     ):
         self.smtp_server = smtp_server
@@ -20,6 +23,7 @@ class EmailService:
         self.smtp_user = smtp_user
         self.smtp_password = smtp_password
         self.sender_email = sender_email
+        self.attachment_path = attachment_path
         self.use_tls = use_tls
         self.signature = None  # Initialize signature to None
         self._validate_credentials()
@@ -42,18 +46,35 @@ class EmailService:
         subject: str,
         body: str,
     ) -> MIMEMultipart:
+
         msg = MIMEMultipart()
+
         msg["From"] = self.sender_email
         msg["To"] = to_email if isinstance(to_email, str) else ", ".join(to_email)
         msg["Subject"] = subject
 
-        # Append signature if available
-        if self.signature:
-            sig = self.signature
-            full_content = body
-            full_content += f"<br><br>{sig}"
-            msg.attach(MIMEText(full_content, "html"))
+        # Convert plain-text body to HTML while preserving paragraphs
+        body_html = html.escape(body).replace("\n\n", "<br><br>").replace("\n", "<br>")
 
+        # Append signature
+        if self.signature:
+            body_html += f"<br><br>{self.signature}"
+
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+        # Attachment
+        if self.attachment_path and os.path.isfile(self.attachment_path):
+            with open(self.attachment_path, "rb") as f:
+                attachment = MIMEApplication(
+                    f.read(),
+                    Name=os.path.basename(self.attachment_path),
+                )
+
+            attachment["Content-Disposition"] = (
+                f'attachment; filename="{os.path.basename(self.attachment_path)}"'
+            )
+
+            msg.attach(attachment)
         return msg
 
     def send_email(
@@ -67,10 +88,12 @@ class EmailService:
         recipients = [to_email] if isinstance(to_email, str) else to_email
 
         with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-            server.ehlo()
+
             if self.use_tls:
+                server.ehlo()
                 server.starttls()
                 server.ehlo()
+
             server.login(self.smtp_user, self.smtp_password)
             server.sendmail(self.sender_email, recipients, msg.as_string())
 

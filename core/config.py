@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str
     SMTP_PASSWORD: str
     SENDER_EMAIL: str
+    ATTACHMENT_PATH: str
 
     GOOGLE_API_KEY: str
     GROQ_API_KEY: str

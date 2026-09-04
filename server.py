@@ -18,16 +18,19 @@ async def lifespan(app: FastAPI):
         smtp_user=app.state.settings.SMTP_USERNAME,
         smtp_password=app.state.settings.SMTP_PASSWORD,
         sender_email=app.state.settings.SENDER_EMAIL,
+        attachment_path=app.state.settings.ATTACHMENT_PATH,
     )
     smtp_manager.set_up_default_signature("signature.html")
 
     app.state.get_llm_client_invoke = llm_manager
     app.state.get_smtp_client_invoke = smtp_manager
-    app.state.selenium_driver = get_human_driver()
+
+    # selenium_driver = get_human_driver()
+    # app.state.selenium_driver = selenium_driver
 
     yield
 
-    app.state.selenium_driver.quit()
+    # selenium_driver.quit()
 
 
 class Server:

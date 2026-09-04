@@ -17,7 +17,7 @@ class SocialMediaService:
 
     # Routes to filter out so you only capture business/individual profile URLs
     EXCLUDED_PATHS = {
-        "instagram": {
+        "instagram page": {
             "p",
             "reel",
             "reels",
@@ -29,7 +29,7 @@ class SocialMediaService:
             "direct",
             "popular",
         },
-        "facebook": {
+        "facebook page": {
             "sharer",
             "share",
             "login",
@@ -41,7 +41,7 @@ class SocialMediaService:
             "policies",
             "privacy",
         },
-        "linkedin": {
+        "linkedin profile": {
             "feed",
             "sharing",
             "login",
@@ -51,18 +51,50 @@ class SocialMediaService:
             "help",
             "legal",
         },
+        "email": [
+            "info",
+            "contact",
+            "hello",
+            "hi",
+            "support",
+            "help",
+            "customercare",
+            "customer.care",
+            "customerservice",
+            "service",
+            "sales",
+            "marketing",
+            "admin",
+            "administrator",
+            "office",
+            "enquiry",
+            "enquiries",
+            "inquiry",
+            "reception",
+            "billing",
+            "accounts",
+            "hr",
+            "jobs",
+            "careers",
+            "noreply",
+            "no-reply",
+            "donotreply",
+            "do-not-reply",
+            "donotemail",
+            "do-not-email",
+        ],
     }
 
     PATTERNS = {
-        "instagram": re.compile(
+        "instagram page": re.compile(
             r"https?://(?:www\.)?instagram\.com/([a-zA-Z0-9_.]+)/?",
             re.IGNORECASE,
         ),
-        "facebook": re.compile(
+        "facebook page": re.compile(
             r"https?://(?:www\.)?facebook\.com/([a-zA-Z0-9._-]+)/?",
             re.IGNORECASE,
         ),
-        "linkedin": re.compile(
+        "linkedin profile": re.compile(
             r"https?://(?:[a-z]{2,3}\.)?linkedin\.com/(?:in|company)/([a-zA-Z0-9_-]+)/?",
             re.IGNORECASE,
         ),
@@ -82,8 +114,8 @@ class SocialMediaService:
         parts = [
             platform_keyword,
             self.place_data.get("name", ""),
-            self.place_data.get("address", ""),
-            self.place_data.get("phone", ""),
+            self.place_data.get("city", ""),
+            self.place_data.get("country", ""),
         ]
         return " ".join(p.strip() for p in parts if p and p.strip())
 
@@ -161,13 +193,13 @@ class SocialMediaService:
         return ""
 
     def get_instagram(self) -> str:
-        return self._find_social_link("instagram")
+        return self._find_social_link("instagram page")
 
     def get_facebook(self) -> str:
-        return self._find_social_link("facebook")
+        return self._find_social_link("facebook page")
 
     def get_linkedin(self) -> str:
-        return self._find_social_link("linkedin")
+        return self._find_social_link("linkedin profile")
 
     def get_email(self, url) -> str:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -176,8 +208,13 @@ class SocialMediaService:
         emails = re.findall(
             r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", resp.text
         )
-        if emails:
-            return emails[0]
+        excluded = self.EXCLUDED_PATHS["email"]
+        for email in emails:
+            email = email.lower().strip()
+            username = email.split("@")[0]
+
+            if username not in excluded:
+                return email
 
         return ""
 
@@ -189,11 +226,11 @@ class SocialMediaService:
         social_info["linkedin"] = self.get_linkedin()
 
         for url in [
-            *social_info.values(),
             self.place_data.get("website", ""),
+            *social_info.values(),
         ]:
             if url:
                 if email := self.get_email(url):
-                    social_info["email"] = email
+                    social_info["Email"] = email
                     break
         return social_info

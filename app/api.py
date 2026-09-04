@@ -2,9 +2,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from .dependency import get_app_state
 import pandas as pd
 from .schemas import SearchRequest
-from .utils import fetch_leads_places_api
+from .utils import fetch_leads_places_api, get_human_driver
 from services import smtp, llm_agent, social_media
 import os
+from constant import EMAIL_PROMPT
 
 router = APIRouter()
 
@@ -37,29 +38,52 @@ def run_automation(payload: SearchRequest, app_state=Depends(get_app_state)):
     smtp_client: smtp.EmailService = app_state.get_smtp_client_invoke
 
     for lead in leads_raw:
-        finder = social_media.SocialMediaService(lead, app_state.selenium_driver)
-        results = finder.get_all()
 
-        email_body = ""
+        try:
+            selenium_driver = get_human_driver(headless=True)
+            finder = social_media.SocialMediaService(lead, selenium_driver)
+            results = finder.get_all()
+        except Exception as e:
+            print(f"Error occurred while processing lead: {e}")
+            results = {}
+
+        selenium_driver.quit()
+
+        name = lead.get("name", "")
         status = "No Email Found"
-        email = results.get("email")
+        email = results.get("Email", "")
+        llm_resp_email = {}
+
         if email:
-            # try:
-            #     email_body = llm_client(name, meta)
-            #     smtp_client.send_email(
-            #         to_email=email, subject=f"Inquiry for {name}", body=email_body
-            #     )
-            #     status = "Sent"
-            # except Exception as e:
-            #     status = f"Failed: {str(e)}"
-            ...
+            meta = {
+                "reviewSummary": lead.get("reviewSummary", ""),
+                "priceRange": lead.get("priceRange", ""),
+                "rating": lead.get("rating", ""),
+                "types": lead.get("types", []),
+                "website": lead.get("website", ""),
+                "name": lead.get("name", ""),
+            }
+            try:
+                llm_resp_email = llm_client.invoke_llm(
+                    llm_client.get_client("llm_gpt_oss_120"), meta, EMAIL_PROMPT
+                )
+                smtp_client.send_email(
+                    to_email=email,
+                    subject=llm_resp_email.get("subject", ""),
+                    body=llm_resp_email.get("body", ""),
+                )
+                status = "Sent"
+            except Exception as e:
+                status = f"Failed: {str(e)}"
 
         processed_leads.append(
             {
-                "Name": lead.get("name"),
+                "Name": name,
                 "Website": lead.get("website"),
-                "Draft": email_body,
+                "email_subject": llm_resp_email.get("subject", ""),
+                "email_draft": llm_resp_email.get("body", ""),
                 "address": lead.get("address"),
+                "meta": meta,
                 **results,
                 "Status": status,
                 "user_validation": False,
@@ -74,7 +98,9 @@ def run_automation(payload: SearchRequest, app_state=Depends(get_app_state)):
         # 1. Strip NaNs before checking membership
         existing_websites = set(existing_df["Website"].dropna().astype(str).str.strip())
         existing_emails = set(existing_df["Email"].dropna().astype(str).str.strip())
-        existing_ig = set(existing_df["Instagram URL"].dropna().astype(str).str.strip())
+        existing_ig = set(existing_df["instagram"].dropna().astype(str).str.strip())
+        existing_fb = set(existing_df["facebook"].dropna().astype(str).str.strip())
+        existing_li = set(existing_df["linkedin"].dropna().astype(str).str.strip())
 
         # Pair Name + Address to avoid dropping common business names in different locations
         existing_name_addr = set(
@@ -102,8 +128,16 @@ def run_automation(payload: SearchRequest, app_state=Depends(get_app_state)):
                 & df["Email"].astype(str).str.strip().isin(existing_emails)
             )
             | (
-                df["Instagram URL"].notna()
-                & df["Instagram URL"].astype(str).str.strip().isin(existing_ig)
+                df["instagram"].notna()
+                & df["instagram"].astype(str).str.strip().isin(existing_ig)
+            )
+            | (
+                df["facebook"].notna()
+                & df["facebook"].astype(str).str.strip().isin(existing_fb)
+            )
+            | (
+                df["linkedin"].notna()
+                & df["linkedin"].astype(str).str.strip().isin(existing_li)
             )
             | (df["Name"].notna() & curr_name_addr.isin(existing_name_addr))
         )
